@@ -43,11 +43,14 @@ message TraceShred {
 
 service ShredstreamProxy {
   rpc SubscribeEntries(SubscribeEntriesRequest) returns (stream Entry);
+  rpc SubscribeRawEntries(SubscribeRawEntriesRequest) returns (stream RawEntry);
 }
 
 message SubscribeEntriesRequest {
   // tbd: we may want to add filters here
 }
+
+message SubscribeRawEntriesRequest {}
 
 message Entry {
   // the slot that the entry is from
@@ -55,4 +58,9 @@ message Entry {
 
   // Serialized bytes of Vec<Entry>: https://docs.rs/solana-entry/latest/solana_entry/entry/struct.Entry.html
   bytes entries = 2;
+}
+
+message RawEntry {
+  uint64 slot = 1;
+  bytes payload = 2;
 }

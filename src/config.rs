@@ -46,6 +46,10 @@ pub enum EndpointKind {
     Arpc,
     Thor,
     Shredstream,
+    #[serde(rename = "shredstream_raw")]
+    ShredstreamRaw,
+    #[serde(rename = "xw_tx")]
+    XwTx,
     Shreder,
     Jetstream,
 }
@@ -86,6 +90,8 @@ impl EndpointKind {
             EndpointKind::Arpc => "arpc",
             EndpointKind::Thor => "thor",
             EndpointKind::Shredstream => "shredstream",
+            EndpointKind::ShredstreamRaw => "shredstream_raw",
+            EndpointKind::XwTx => "xw_tx",
             EndpointKind::Shreder => "shreder",
             EndpointKind::Jetstream => "jetstream",
         }

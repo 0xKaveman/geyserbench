@@ -68,7 +68,11 @@ kind = "yellowstone"
 - `config.transactions` sets how many signatures to evaluate (backend streaming automatically disables itself for extremely large runs).
 - `config.account` is the pubkey monitored for transactions during the benchmark.
 - `config.commitment` accepts `processed`, `confirmed`, or `finalized`.
-- Repeat `[[endpoint]]` blocks for each feed. Supported `kind` values: `yellowstone`, `arpc`, `thor`, `shredstream`, `shreder`, and `jetstream`. `x_token` is optional.
+- Repeat `[[endpoint]]` blocks for each feed. Supported `kind` values: `yellowstone`, `arpc`, `thor`, `shredstream`, `shredstream_raw`, `shreder`, and `jetstream`. `x_token` is optional.
+- 现在额外支持 `xw_tx`：
+  - `url` 写成 `udp://IP:PORT`
+  - 它会绑定本地 UDP socket，接收 super-shred 直接推送的命中过滤交易
+  - 若 `config.account = "*"`，则表示“只确认有数据”，不再按单个账户过滤
 
 ## CLI Options
 

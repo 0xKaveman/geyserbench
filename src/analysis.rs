@@ -129,7 +129,7 @@ pub fn display_run_summary(summary: &RunSummary) {
     if !summary.has_data {
         println!("Not enough data");
     } else {
-	let fastest_name_ref = summary.fastest_endpoint.as_deref();
+        let fastest_name_ref = summary.fastest_endpoint.as_deref();
         let mut summary_rows: Vec<&EndpointSummary> = summary.endpoints.iter().collect();
         summary_rows.sort_by(|a, b| compare_latency(a, b));
 

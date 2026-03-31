@@ -22,9 +22,9 @@ pub mod shredstream {
     include!(concat!(env!("OUT_DIR"), "/shredstream.rs"));
 }
 
-pub struct ShredstreamProvider;
+pub struct ShredstreamRawProvider;
 
-impl GeyserProvider for ShredstreamProvider {
+impl GeyserProvider for ShredstreamRawProvider {
     fn process(
         &self,
         endpoint: Endpoint,
@@ -54,7 +54,7 @@ async fn process_shredstream_endpoint(
         progress,
     } = context;
     let signature_sender = signature_tx;
-    let account_pubkey = parse_account_filter(&config.account)?;
+    let account_pubkey = config.account.parse::<Pubkey>()?;
     let endpoint_name = endpoint.name.clone();
     let mut log_file = if tracing::enabled!(Level::TRACE) {
         Some(open_log_file(&endpoint_name)?)
@@ -73,8 +73,8 @@ async fn process_shredstream_endpoint(
     .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
     info!(endpoint = %endpoint_name, "Connected");
 
-    let request = shredstream::SubscribeEntriesRequest {};
-    let mut stream = client.subscribe_entries(request).await?.into_inner();
+    let request = shredstream::SubscribeRawEntriesRequest {};
+    let mut stream = client.subscribe_raw_entries(request).await?.into_inner();
 
     let mut accumulator = TransactionAccumulator::new();
     let mut transaction_count = 0usize;
@@ -88,17 +88,23 @@ async fn process_shredstream_endpoint(
 
         Some(Ok(slot_entry)) = stream.next() => {
             let entries = match bincode::deserialize::<Vec<solana_entry::entry::Entry>>(
-                &slot_entry.entries,
+                &slot_entry.payload,
             ) {
                 Ok(e) => e,
                 Err(e) => {
-                    error!(endpoint = %endpoint_name, error = %e, "Failed to deserialize shredstream entries");
+                    error!(endpoint = %endpoint_name, error = %e, "Failed to deserialize raw shredstream payload");
                     continue;
                 }
             };
             for entry in entries {
                 for tx in entry.transactions {
-                    if !matches_account_filter(account_pubkey.as_ref(), tx.message.static_account_keys()) {
+                    let has_account = tx
+                        .message
+                        .static_account_keys()
+                        .iter()
+                        .any(|key| key == &account_pubkey);
+
+                    if !has_account {
                         continue;
                     }
 
@@ -116,10 +122,7 @@ async fn process_shredstream_endpoint(
                         start_wallclock_secs,
                     };
 
-                    let updated = accumulator.record(
-                        signature.clone(),
-                        tx_data.clone(),
-                    );
+                    let updated = accumulator.record(signature.clone(), tx_data.clone());
 
                     if updated
                         && let Some(envelope) = build_signature_envelope(
@@ -166,19 +169,4 @@ async fn process_shredstream_endpoint(
         "Stream closed after dispatching transactions"
     );
     Ok(())
-}
-
-fn parse_account_filter(value: &str) -> Result<Option<Pubkey>, Box<dyn Error + Send + Sync>> {
-    if value.trim().is_empty() || value == "*" {
-        Ok(None)
-    } else {
-        Ok(Some(value.parse::<Pubkey>()?))
-    }
-}
-
-fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
-    match filter {
-        Some(wanted) => keys.iter().any(|key| key == wanted),
-        None => true,
-    }
 }

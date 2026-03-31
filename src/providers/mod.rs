@@ -20,7 +20,9 @@ pub mod common;
 pub mod jetstream;
 pub mod shreder;
 pub mod shredstream;
+pub mod shredstream_raw;
 pub mod thor;
+pub mod xw_tx;
 pub mod yellowstone;
 mod yellowstone_client;
 
@@ -40,6 +42,8 @@ pub fn create_provider(kind: &EndpointKind) -> Box<dyn GeyserProvider> {
         EndpointKind::Thor => Box::new(thor::ThorProvider),
         EndpointKind::Shreder => Box::new(shreder::ShrederProvider),
         EndpointKind::Shredstream => Box::new(shredstream::ShredstreamProvider),
+        EndpointKind::ShredstreamRaw => Box::new(shredstream_raw::ShredstreamRawProvider),
+        EndpointKind::XwTx => Box::new(xw_tx::XwTxProvider),
         EndpointKind::Jetstream => Box::new(jetstream::JetstreamProvider),
     }
 }
