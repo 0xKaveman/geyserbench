@@ -86,8 +86,8 @@ async fn process_xw_tx_endpoint(
                     continue;
                 }
             };
-            let tx = match bincode::deserialize::<VersionedTransaction>(&buffer[..size]) {
-                Ok(tx) => tx,
+            let (slot, tx) = match parse_xw_tx_payload(&buffer[..size]) {
+                Ok(value) => value,
                 Err(err) => {
                     error!(endpoint = %endpoint_name, error = %err, "Failed to deserialize xw_tx payload");
                     continue;
@@ -107,6 +107,8 @@ async fn process_xw_tx_endpoint(
             if let Some(file) = log_file.as_mut() {
                 write_log_entry(file, wallclock, &endpoint_name, &signature)?;
             }
+
+            let _ = slot;
 
             let tx_data = TransactionData {
                 wallclock_secs: wallclock,
@@ -174,5 +176,48 @@ fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
     match filter {
         Some(wanted) => keys.iter().any(|key| key == wanted),
         None => true,
+    }
+}
+
+fn parse_xw_tx_payload(
+    payload: &[u8],
+) -> Result<(Option<u64>, VersionedTransaction), Box<dyn Error + Send + Sync>> {
+    if payload.len() >= 8 {
+        let slot = u64::from_le_bytes(payload[..8].try_into()?);
+        if let Ok(tx) = bincode::deserialize::<VersionedTransaction>(&payload[8..]) {
+            return Ok((Some(slot), tx));
+        }
+    }
+    Ok((None, bincode::deserialize::<VersionedTransaction>(payload)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_xw_tx_payload;
+    use bincode::serialize;
+    use solana_transaction::versioned::VersionedTransaction;
+
+    fn sample_tx() -> VersionedTransaction {
+        VersionedTransaction::default()
+    }
+
+    #[test]
+    fn parses_slot_prefixed_payload() {
+        let slot = 77u64;
+        let tx = sample_tx();
+        let mut datagram = slot.to_le_bytes().to_vec();
+        datagram.extend_from_slice(&serialize(&tx).unwrap());
+        let (decoded_slot, decoded_tx) = parse_xw_tx_payload(&datagram).unwrap();
+        assert_eq!(decoded_slot, Some(slot));
+        assert_eq!(decoded_tx, tx);
+    }
+
+    #[test]
+    fn falls_back_to_legacy_unprefixed_payload() {
+        let tx = sample_tx();
+        let payload = serialize(&tx).unwrap();
+        let (decoded_slot, decoded_tx) = parse_xw_tx_payload(&payload).unwrap();
+        assert_eq!(decoded_slot, None);
+        assert_eq!(decoded_tx, tx);
     }
 }

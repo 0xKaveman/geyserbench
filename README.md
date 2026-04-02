@@ -72,6 +72,7 @@ kind = "yellowstone"
 - 现在额外支持 `xw_tx`：
   - `url` 写成 `udp://IP:PORT`
   - 它会绑定本地 UDP socket，接收 super-shred 直接推送的命中过滤交易
+  - 兼容两种 wire format：旧的原始 `tx_wire_bytes`，以及新的 `[slot_le64][tx_wire_bytes]`
   - 若 `config.account = "*"`，则表示“只确认有数据”，不再按单个账户过滤
 
 ## CLI Options
