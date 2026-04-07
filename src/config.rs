@@ -48,6 +48,7 @@ pub enum EndpointKind {
     Shredstream,
     #[serde(rename = "shredstream_raw")]
     ShredstreamRaw,
+    Node1,
     #[serde(rename = "xw_tx")]
     XwTx,
     Shreder,
@@ -91,6 +92,7 @@ impl EndpointKind {
             EndpointKind::Thor => "thor",
             EndpointKind::Shredstream => "shredstream",
             EndpointKind::ShredstreamRaw => "shredstream_raw",
+            EndpointKind::Node1 => "node1",
             EndpointKind::XwTx => "xw_tx",
             EndpointKind::Shreder => "shreder",
             EndpointKind::Jetstream => "jetstream",
@@ -144,5 +146,30 @@ impl ConfigToml {
         } else {
             Self::create_default(path)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ConfigToml, EndpointKind};
+
+    #[test]
+    fn parses_node1_endpoint_kind() {
+        let parsed: ConfigToml = toml::from_str(
+            r#"
+[config]
+transactions = 1
+account = "*"
+commitment = "processed"
+
+[[endpoint]]
+name = "node1"
+url = "udp://0.0.0.0:9999"
+kind = "node1"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.endpoint[0].kind, EndpointKind::Node1);
     }
 }

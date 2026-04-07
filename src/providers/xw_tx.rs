@@ -86,7 +86,7 @@ async fn process_xw_tx_endpoint(
                     continue;
                 }
             };
-            let (slot, tx) = match parse_xw_tx_payload(&buffer[..size]) {
+            let (slot, tx) = match parse_udp_tx_payload(&buffer[..size]) {
                 Ok(value) => value,
                 Err(err) => {
                     error!(endpoint = %endpoint_name, error = %err, "Failed to deserialize xw_tx payload");
@@ -159,12 +159,14 @@ async fn process_xw_tx_endpoint(
     Ok(())
 }
 
-fn parse_udp_bind_addr(url: &str) -> Result<SocketAddr, Box<dyn Error + Send + Sync>> {
+pub(crate) fn parse_udp_bind_addr(url: &str) -> Result<SocketAddr, Box<dyn Error + Send + Sync>> {
     let raw = url.strip_prefix("udp://").unwrap_or(url);
     Ok(raw.parse()?)
 }
 
-fn parse_account_filter(value: &str) -> Result<Option<Pubkey>, Box<dyn Error + Send + Sync>> {
+pub(crate) fn parse_account_filter(
+    value: &str,
+) -> Result<Option<Pubkey>, Box<dyn Error + Send + Sync>> {
     if value.trim().is_empty() || value == "*" {
         Ok(None)
     } else {
@@ -172,14 +174,14 @@ fn parse_account_filter(value: &str) -> Result<Option<Pubkey>, Box<dyn Error + S
     }
 }
 
-fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
+pub(crate) fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
     match filter {
         Some(wanted) => keys.iter().any(|key| key == wanted),
         None => true,
     }
 }
 
-fn parse_xw_tx_payload(
+pub(crate) fn parse_udp_tx_payload(
     payload: &[u8],
 ) -> Result<(Option<u64>, VersionedTransaction), Box<dyn Error + Send + Sync>> {
     if payload.len() >= 8 {
@@ -193,7 +195,7 @@ fn parse_xw_tx_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_xw_tx_payload;
+    use super::parse_udp_tx_payload;
     use bincode::serialize;
     use solana_transaction::versioned::VersionedTransaction;
 
@@ -207,7 +209,7 @@ mod tests {
         let tx = sample_tx();
         let mut datagram = slot.to_le_bytes().to_vec();
         datagram.extend_from_slice(&serialize(&tx).unwrap());
-        let (decoded_slot, decoded_tx) = parse_xw_tx_payload(&datagram).unwrap();
+        let (decoded_slot, decoded_tx) = parse_udp_tx_payload(&datagram).unwrap();
         assert_eq!(decoded_slot, Some(slot));
         assert_eq!(decoded_tx, tx);
     }
@@ -216,7 +218,7 @@ mod tests {
     fn falls_back_to_legacy_unprefixed_payload() {
         let tx = sample_tx();
         let payload = serialize(&tx).unwrap();
-        let (decoded_slot, decoded_tx) = parse_xw_tx_payload(&payload).unwrap();
+        let (decoded_slot, decoded_tx) = parse_udp_tx_payload(&payload).unwrap();
         assert_eq!(decoded_slot, None);
         assert_eq!(decoded_tx, tx);
     }
