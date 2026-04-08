@@ -136,6 +136,7 @@ async fn process_shredstream_endpoint(
                 }
 
                 let tx_data = TransactionData {
+                    slot: None,
                     wallclock_secs: wallclock,
                     elapsed_since_start: elapsed,
                     start_wallclock_secs,

@@ -10,6 +10,7 @@ use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
 pub struct TransactionData {
+    pub slot: Option<u64>,
     pub wallclock_secs: f64,
     pub elapsed_since_start: Duration,
     pub start_wallclock_secs: f64,

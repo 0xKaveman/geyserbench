@@ -68,6 +68,7 @@ pub fn build_signature_envelope(
                 .into_iter()
                 .map(|(endpoint, tx_data)| SignatureObservation {
                     endpoint,
+                    slot: tx_data.slot,
                     timestamp: tx_data.wallclock_secs,
                     backfilled: tx_data.wallclock_secs < tx_data.start_wallclock_secs,
                 })
@@ -88,5 +89,36 @@ pub fn enqueue_signature(
 ) {
     if sender.push(envelope).is_err() {
         warn!(endpoint = endpoint, signature = %signature, "Signature queue full; dropping observation");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use crate::utils::Comparator;
+
+    use super::build_signature_envelope;
+
+    #[test]
+    fn signature_envelope_preserves_slot() {
+        let comparator = Arc::new(Comparator::new());
+        let envelope = build_signature_envelope(
+            &comparator,
+            "node1",
+            "sig",
+            crate::utils::TransactionData {
+                slot: Some(77),
+                wallclock_secs: 1.0,
+                elapsed_since_start: Duration::from_millis(1),
+                start_wallclock_secs: 0.5,
+            },
+            1,
+        )
+        .expect("single producer should emit envelope");
+
+        assert_eq!(envelope.observations.len(), 1);
+        assert_eq!(envelope.observations[0].endpoint, "node1");
+        assert_eq!(envelope.observations[0].slot, Some(77));
     }
 }

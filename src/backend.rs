@@ -28,6 +28,7 @@ pub struct StreamOptions {
 #[derive(Debug, Clone)]
 pub struct SignatureObservation {
     pub endpoint: String,
+    pub slot: Option<u64>,
     pub timestamp: f64,
     pub backfilled: bool,
 }
@@ -132,6 +133,8 @@ struct BackendEndpointPayload {
 #[derive(Serialize)]
 struct SignedObservationPayload {
     endpoint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slot: Option<u64>,
     timestamp: f64,
     proof: String,
     #[serde(skip_serializing_if = "core::ops::Not::not", default)]
@@ -504,6 +507,7 @@ async fn send_signature(
         .into_iter()
         .map(|obs| SignedObservationPayload {
             endpoint: obs.endpoint.clone(),
+            slot: obs.slot,
             timestamp: obs.timestamp,
             proof: compute_proof(
                 session_nonce,

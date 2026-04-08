@@ -160,9 +160,8 @@ fn run_node1_stream_loop(
             write_log_entry(file, wallclock, &endpoint_name, &signature)?;
         }
 
-        let _ = slot;
-
         let tx_data = TransactionData {
+            slot,
             wallclock_secs: wallclock,
             elapsed_since_start: elapsed,
             start_wallclock_secs,

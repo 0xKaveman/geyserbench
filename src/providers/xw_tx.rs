@@ -108,9 +108,8 @@ async fn process_xw_tx_endpoint(
                 write_log_entry(file, wallclock, &endpoint_name, &signature)?;
             }
 
-            let _ = slot;
-
             let tx_data = TransactionData {
+                slot,
                 wallclock_secs: wallclock,
                 elapsed_since_start: elapsed,
                 start_wallclock_secs,
