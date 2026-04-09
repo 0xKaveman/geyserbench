@@ -4,12 +4,11 @@ account = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 commitment = "processed"
 
 [[endpoint]]
-name = "shreder"
-url = "http://64.130.45.98:10040"
-x_token = ""
-kind = "shreder"
+name = "tx-stream"
+url = "udp://0.0.0.0:12003"
+kind = "node1"
 
 [[endpoint]]
-name = "node1-local"
-url = "udp://0.0.0.0:9527"
-kind = "node1"
+name = "raw-shred"
+url = "udp://0.0.0.0:12000"
+kind = "raw_shred"

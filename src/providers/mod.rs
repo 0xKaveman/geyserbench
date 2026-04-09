@@ -19,6 +19,7 @@ pub mod arpc;
 pub mod common;
 pub mod jetstream;
 pub mod node1;
+pub mod raw_shred;
 pub mod shreder;
 pub mod shredstream;
 pub mod shredstream_raw;
@@ -44,6 +45,7 @@ pub fn create_provider(kind: &EndpointKind) -> Box<dyn GeyserProvider> {
         EndpointKind::Shreder => Box::new(shreder::ShrederProvider),
         EndpointKind::Shredstream => Box::new(shredstream::ShredstreamProvider),
         EndpointKind::ShredstreamRaw => Box::new(shredstream_raw::ShredstreamRawProvider),
+        EndpointKind::RawShred => Box::new(raw_shred::RawShredProvider),
         EndpointKind::Node1 => Box::new(node1::Node1Provider),
         EndpointKind::XwTx => Box::new(xw_tx::XwTxProvider),
         EndpointKind::Jetstream => Box::new(jetstream::JetstreamProvider),

@@ -3,8 +3,6 @@ use std::{error::Error, sync::atomic::Ordering};
 use tokio::task;
 use tracing::{Level, error, info};
 
-use solana_pubkey::Pubkey;
-
 use crate::{
     config::{Config, Endpoint},
     utils::{TransactionData, get_current_timestamp, open_log_file, write_log_entry},
@@ -15,6 +13,7 @@ use super::{
     common::{
         TransactionAccumulator, build_signature_envelope, enqueue_signature, fatal_connection_error,
     },
+    xw_tx::{matches_account_filter, parse_account_filter},
 };
 
 #[allow(clippy::all, dead_code)]
@@ -54,7 +53,7 @@ async fn process_shredstream_endpoint(
         progress,
     } = context;
     let signature_sender = signature_tx;
-    let account_pubkey = parse_account_filter(&config.account)?;
+    let account_filter = parse_account_filter(&config.account)?;
     let endpoint_name = endpoint.name.clone();
     let mut log_file = if tracing::enabled!(Level::TRACE) {
         Some(open_log_file(&endpoint_name)?)
@@ -98,7 +97,7 @@ async fn process_shredstream_endpoint(
             };
             for entry in entries {
                 for tx in entry.transactions {
-                    if !matches_account_filter(account_pubkey.as_ref(), tx.message.static_account_keys()) {
+                    if !matches_account_filter(account_filter.as_deref(), tx.message.static_account_keys()) {
                         continue;
                     }
 
@@ -167,19 +166,4 @@ async fn process_shredstream_endpoint(
         "Stream closed after dispatching transactions"
     );
     Ok(())
-}
-
-fn parse_account_filter(value: &str) -> Result<Option<Pubkey>, Box<dyn Error + Send + Sync>> {
-    if value.trim().is_empty() || value == "*" {
-        Ok(None)
-    } else {
-        Ok(Some(value.parse::<Pubkey>()?))
-    }
-}
-
-fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
-    match filter {
-        Some(wanted) => keys.iter().any(|key| key == wanted),
-        None => true,
-    }
 }

@@ -50,7 +50,7 @@ async fn process_xw_tx_endpoint(
         progress,
     } = context;
     let signature_sender = signature_tx;
-    let account_pubkey = parse_account_filter(&config.account)?;
+    let account_filter = parse_account_filter(&config.account)?;
     let endpoint_name = endpoint.name.clone();
     let bind_addr = parse_udp_bind_addr(&endpoint.url)
         .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
@@ -94,7 +94,7 @@ async fn process_xw_tx_endpoint(
                 }
             };
 
-            if !matches_account_filter(account_pubkey.as_ref(), tx.message.static_account_keys())
+            if !matches_account_filter(account_filter.as_deref(), tx.message.static_account_keys())
                 || tx.signatures.is_empty()
             {
                 continue;
@@ -165,17 +165,33 @@ pub(crate) fn parse_udp_bind_addr(url: &str) -> Result<SocketAddr, Box<dyn Error
 
 pub(crate) fn parse_account_filter(
     value: &str,
-) -> Result<Option<Pubkey>, Box<dyn Error + Send + Sync>> {
-    if value.trim().is_empty() || value == "*" {
+) -> Result<Option<Vec<Pubkey>>, Box<dyn Error + Send + Sync>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "*" {
         Ok(None)
     } else {
-        Ok(Some(value.parse::<Pubkey>()?))
+        let accounts = trimmed
+            .split([',', '\n', '\r', ' ', '\t'])
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::parse::<Pubkey>)
+            .collect::<Result<Vec<_>, _>>()?;
+        if accounts.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(accounts))
+        }
     }
 }
 
-pub(crate) fn matches_account_filter(filter: Option<&Pubkey>, keys: &[Pubkey]) -> bool {
+pub(crate) fn matches_account_filter<K>(filter: Option<&[Pubkey]>, keys: &[K]) -> bool
+where
+    K: AsRef<[u8]>,
+{
     match filter {
-        Some(wanted) => keys.iter().any(|key| key == wanted),
+        Some(wanted) => keys
+            .iter()
+            .any(|key| wanted.iter().any(|candidate| candidate.as_ref() == key.as_ref())),
         None => true,
     }
 }
@@ -194,8 +210,9 @@ pub(crate) fn parse_udp_tx_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_udp_tx_payload;
+    use super::{matches_account_filter, parse_account_filter, parse_udp_tx_payload};
     use bincode::serialize;
+    use solana_pubkey::Pubkey;
     use solana_transaction::versioned::VersionedTransaction;
 
     fn sample_tx() -> VersionedTransaction {
@@ -220,5 +237,22 @@ mod tests {
         let (decoded_slot, decoded_tx) = parse_udp_tx_payload(&payload).unwrap();
         assert_eq!(decoded_slot, None);
         assert_eq!(decoded_tx, tx);
+    }
+
+    #[test]
+    fn parses_multi_account_filter() {
+        let filter = parse_account_filter(
+            "11111111111111111111111111111111, Sysvar1111111111111111111111111111111111111",
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(filter.len(), 2);
+        let keys = vec![
+            "Sysvar1111111111111111111111111111111111111"
+                .parse::<Pubkey>()
+                .unwrap(),
+        ];
+        assert!(matches_account_filter(Some(filter.as_slice()), &keys));
     }
 }

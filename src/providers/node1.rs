@@ -1,14 +1,13 @@
 use std::{
     error::Error,
     io,
-    mem::size_of_val,
     net::{SocketAddrV4, UdpSocket},
     sync::atomic::Ordering,
     time::Duration,
 };
 
 #[cfg(target_os = "linux")]
-use std::os::fd::AsRawFd;
+use std::{mem::size_of_val, os::fd::AsRawFd};
 
 use tokio::{sync::broadcast::error::TryRecvError, task};
 use tracing::{Level, error, info};
@@ -74,7 +73,7 @@ fn run_node1_stream_loop(
         progress,
     } = context;
     let signature_sender = signature_tx;
-    let account_pubkey = parse_account_filter(&config.account)?;
+    let account_filter = parse_account_filter(&config.account)?;
     let endpoint_name = endpoint.name.clone();
     let bind_addr = parse_udp_bind_addr(&endpoint.url)
         .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
@@ -146,7 +145,7 @@ fn run_node1_stream_loop(
             }
         };
 
-        if !matches_account_filter(account_pubkey.as_ref(), tx.message.static_account_keys())
+        if !matches_account_filter(account_filter.as_deref(), tx.message.static_account_keys())
             || tx.signatures.is_empty()
         {
             continue;

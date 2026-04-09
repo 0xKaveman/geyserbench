@@ -48,6 +48,8 @@ pub enum EndpointKind {
     Shredstream,
     #[serde(rename = "shredstream_raw")]
     ShredstreamRaw,
+    #[serde(rename = "raw_shred")]
+    RawShred,
     Node1,
     #[serde(rename = "xw_tx")]
     XwTx,
@@ -92,6 +94,7 @@ impl EndpointKind {
             EndpointKind::Thor => "thor",
             EndpointKind::Shredstream => "shredstream",
             EndpointKind::ShredstreamRaw => "shredstream_raw",
+            EndpointKind::RawShred => "raw_shred",
             EndpointKind::Node1 => "node1",
             EndpointKind::XwTx => "xw_tx",
             EndpointKind::Shreder => "shreder",
@@ -171,5 +174,25 @@ kind = "node1"
         .unwrap();
 
         assert_eq!(parsed.endpoint[0].kind, EndpointKind::Node1);
+    }
+
+    #[test]
+    fn parses_raw_shred_endpoint_kind() {
+        let parsed: ConfigToml = toml::from_str(
+            r#"
+[config]
+transactions = 1
+account = "*"
+commitment = "processed"
+
+[[endpoint]]
+name = "raw"
+url = "udp://0.0.0.0:12000"
+kind = "raw_shred"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.endpoint[0].kind, EndpointKind::RawShred);
     }
 }

@@ -3,8 +3,6 @@ use std::{error::Error, sync::atomic::Ordering};
 use tokio::task;
 use tracing::{Level, error, info};
 
-use solana_pubkey::Pubkey;
-
 use crate::{
     config::{Config, Endpoint},
     utils::{TransactionData, get_current_timestamp, open_log_file, write_log_entry},
@@ -15,6 +13,7 @@ use super::{
     common::{
         TransactionAccumulator, build_signature_envelope, enqueue_signature, fatal_connection_error,
     },
+    xw_tx::{matches_account_filter, parse_account_filter},
 };
 
 #[allow(clippy::all, dead_code)]
@@ -54,7 +53,7 @@ async fn process_shredstream_endpoint(
         progress,
     } = context;
     let signature_sender = signature_tx;
-    let account_pubkey = config.account.parse::<Pubkey>()?;
+    let account_filter = parse_account_filter(&config.account)?;
     let endpoint_name = endpoint.name.clone();
     let mut log_file = if tracing::enabled!(Level::TRACE) {
         Some(open_log_file(&endpoint_name)?)
@@ -98,13 +97,7 @@ async fn process_shredstream_endpoint(
             };
             for entry in entries {
                 for tx in entry.transactions {
-                    let has_account = tx
-                        .message
-                        .static_account_keys()
-                        .iter()
-                        .any(|key| key == &account_pubkey);
-
-                    if !has_account {
+                    if !matches_account_filter(account_filter.as_deref(), tx.message.static_account_keys()) {
                         continue;
                     }
 
