@@ -1,0 +1,41 @@
+[package]
+name = "solana-ledger"
+version = "3.1.6-lite"
+edition = "2021"
+
+[features]
+agave-unstable-api = []
+dev-context-only-utils = ["solana-perf/dev-context-only-utils"]
+frozen-abi = []
+
+[lib]
+name = "solana_ledger"
+path = "src/lib.rs"
+
+[dependencies]
+assert_matches = "1.5.0"
+bincode = "1.3.3"
+bitflags = { version = "2.9.4", features = ["serde"] }
+bytes = "1.10"
+itertools = "0.12.1"
+lazy-lru = "0.1.3"
+num_enum = "0.7.4"
+rayon = "1.11.0"
+reed-solomon-erasure = { version = "6.0.0", features = ["simd-accel"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_bytes = "0.11.19"
+solana-clock = "3.0.0"
+solana-entry = { version = "=3.1.6", features = ["agave-unstable-api"] }
+solana-hash = "3.1.0"
+solana-keypair = "3.0.1"
+solana-packet = "3.0.0"
+solana-perf = { version = "=3.1.6", features = ["agave-unstable-api"] }
+solana-pubkey = { version = "3.0.0", default-features = false }
+solana-rayon-threadlimit = { version = "=3.1.6", features = ["agave-unstable-api"] }
+solana-sha256-hasher = "3.1.0"
+solana-shred-version = "3.0.0"
+solana-signature = { version = "3.1.0", default-features = false }
+solana-signer = "3.0.0"
+static_assertions = "1.1.0"
+thiserror = "2.0.18"
+wincode = { version = "0.1.2", features = ["derive", "solana-short-vec"] }
