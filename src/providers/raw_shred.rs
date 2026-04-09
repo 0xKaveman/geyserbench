@@ -12,7 +12,9 @@ use std::{mem::size_of_val, os::fd::AsRawFd};
 
 use anyhow::{Result, anyhow};
 use solana_entry_v3::entry::Entry;
-use solana_ledger_lite::shred::{self, DATA_SHREDS_PER_FEC_BLOCK, ReedSolomonCache, Shred, Shredder};
+use solana_ledger_lite::shred::{
+    self, DATA_SHREDS_PER_FEC_BLOCK, ReedSolomonCache, Shred, Shredder,
+};
 use solana_transaction_v3::versioned::VersionedTransaction;
 use tokio::{sync::broadcast::error::TryRecvError, task};
 use tracing::{Level, error, info, warn};
@@ -93,7 +95,8 @@ fn run_raw_shred_loop(
     };
 
     info!(endpoint = %endpoint_name, bind = %bind_addr, "Binding raw shred UDP listener");
-    let socket = UdpSocket::bind(bind_addr).unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
+    let socket = UdpSocket::bind(bind_addr)
+        .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
     socket
         .set_read_timeout(Some(RAW_SHRED_POLL_INTERVAL))
         .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
@@ -223,9 +226,11 @@ where
     K: AsRef<[u8]>,
 {
     match filter {
-        Some(wanted) => keys
-            .iter()
-            .any(|key| wanted.iter().any(|candidate| candidate.as_ref() == key.as_ref())),
+        Some(wanted) => keys.iter().any(|key| {
+            wanted
+                .iter()
+                .any(|candidate| candidate.as_ref() == key.as_ref())
+        }),
         None => true,
     }
 }
@@ -390,15 +395,27 @@ impl ShredProcessor {
             .chain(state.code_shreds.values())
             .cloned()
             .collect::<Vec<_>>();
-        let recovered = shred::recover(shreds, &self.reed_solomon_cache)
-            .map_err(|err| anyhow!("failed to recover FEC set slot={} fec={}: {}", key.slot, key.fec_set_index, err))?;
+        let recovered = shred::recover(shreds, &self.reed_solomon_cache).map_err(|err| {
+            anyhow!(
+                "failed to recover FEC set slot={} fec={}: {}",
+                key.slot,
+                key.fec_set_index,
+                err
+            )
+        })?;
 
         let Some(state) = self.fec_sets.get_mut(&key) else {
             return Ok(());
         };
         for recovered_shred in recovered {
-            let recovered_shred = recovered_shred
-                .map_err(|err| anyhow!("failed to materialize recovered shred slot={} fec={}: {}", key.slot, key.fec_set_index, err))?;
+            let recovered_shred = recovered_shred.map_err(|err| {
+                anyhow!(
+                    "failed to materialize recovered shred slot={} fec={}: {}",
+                    key.slot,
+                    key.fec_set_index,
+                    err
+                )
+            })?;
             if recovered_shred.is_data() {
                 state
                     .data_shreds

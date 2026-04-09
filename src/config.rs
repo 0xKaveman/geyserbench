@@ -54,6 +54,8 @@ pub enum EndpointKind {
     #[serde(rename = "xw_tx")]
     XwTx,
     Shreder,
+    #[serde(rename = "shreder_binary")]
+    ShrederBinary,
     Jetstream,
 }
 
@@ -98,6 +100,7 @@ impl EndpointKind {
             EndpointKind::Node1 => "node1",
             EndpointKind::XwTx => "xw_tx",
             EndpointKind::Shreder => "shreder",
+            EndpointKind::ShrederBinary => "shreder_binary",
             EndpointKind::Jetstream => "jetstream",
         }
     }
@@ -194,5 +197,25 @@ kind = "raw_shred"
         .unwrap();
 
         assert_eq!(parsed.endpoint[0].kind, EndpointKind::RawShred);
+    }
+
+    #[test]
+    fn parses_shreder_binary_endpoint_kind() {
+        let parsed: ConfigToml = toml::from_str(
+            r#"
+[config]
+transactions = 1
+account = "*"
+commitment = "processed"
+
+[[endpoint]]
+name = "shreder-binary"
+url = "http://ny.binary.shreder.xyz:9991"
+kind = "shreder_binary"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.endpoint[0].kind, EndpointKind::ShrederBinary);
     }
 }

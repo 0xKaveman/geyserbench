@@ -1,8 +1,9 @@
 use futures::{SinkExt, channel::mpsc::unbounded};
 use futures_util::stream::StreamExt;
+use solana_transaction::versioned::VersionedTransaction;
 use std::{collections::HashMap, error::Error, sync::atomic::Ordering};
 use tokio::task;
-use tracing::{Level, info, trace};
+use tracing::{Level, error, info, trace};
 
 use crate::{
     config::{Config, Endpoint},
@@ -18,29 +19,29 @@ use super::{
 };
 
 #[allow(clippy::all, dead_code)]
-pub mod shreder {
-    include!(concat!(env!("OUT_DIR"), "/shredstream.rs"));
+pub mod shreder_binary {
+    include!(concat!(env!("OUT_DIR"), "/shreder_binary.rs"));
 }
 
-use shreder::{
-    SubscribeRequestFilterTransactions, SubscribeTransactionsRequest,
-    shreder_service_client::ShrederServiceClient,
+use shreder_binary::{
+    SubscribeBinaryTransactionsRequest, SubscribeRequestFilterBinaryTransactions,
+    shreder_binary_service_client::ShrederBinaryServiceClient,
 };
 
-pub struct ShrederProvider;
+pub struct ShrederBinaryProvider;
 
-impl GeyserProvider for ShrederProvider {
+impl GeyserProvider for ShrederBinaryProvider {
     fn process(
         &self,
         endpoint: Endpoint,
         config: Config,
         context: ProviderContext,
     ) -> task::JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-        task::spawn(async move { process_shredstream_endpoint(endpoint, config, context).await })
+        task::spawn(async move { process_shreder_binary_endpoint(endpoint, config, context).await })
     }
 }
 
-async fn process_shredstream_endpoint(
+async fn process_shreder_binary_endpoint(
     endpoint: Endpoint,
     config: Config,
     context: ProviderContext,
@@ -76,32 +77,32 @@ async fn process_shredstream_endpoint(
 
     info!(endpoint = %endpoint_name, url = %endpoint_url, "Connecting");
 
-    let mut client = ShrederServiceClient::connect(endpoint_url.clone())
+    let mut client = ShrederBinaryServiceClient::connect(endpoint_url.clone())
         .await
         .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
     info!(endpoint = %endpoint_name, "Connected");
 
-    let mut transactions: HashMap<String, SubscribeRequestFilterTransactions> =
+    let mut transactions: HashMap<String, SubscribeRequestFilterBinaryTransactions> =
         HashMap::with_capacity(1);
     transactions.insert(
         String::from("account"),
-        SubscribeRequestFilterTransactions {
+        SubscribeRequestFilterBinaryTransactions {
             account_exclude: vec![],
             account_include: vec![],
             account_required: required_accounts,
         },
     );
 
-    let request = SubscribeTransactionsRequest { transactions };
-    let (mut subscribe_tx, subscribe_rx) = unbounded::<shreder::SubscribeTransactionsRequest>();
+    let request = SubscribeBinaryTransactionsRequest { transactions };
+    let (mut subscribe_tx, subscribe_rx) =
+        unbounded::<shreder_binary::SubscribeBinaryTransactionsRequest>();
     subscribe_tx.send(request).await?;
     let mut stream = client
-        .subscribe_transactions(subscribe_rx)
+        .subscribe_binary_transactions(subscribe_rx)
         .await?
         .into_inner();
 
     let mut accumulator = TransactionAccumulator::new();
-
     let mut transaction_count = 0usize;
 
     loop {
@@ -118,22 +119,29 @@ async fn process_shredstream_endpoint(
 
                 let Some(Ok(msg)) = message else { continue };
                 let Some(tx_update) = msg.transaction.as_ref() else { continue };
-                let Some(tx) = tx_update.transaction.as_ref() else { continue };
-                let Some(txn_msg) = tx.message.as_ref() else { continue };
+                let Some(binary_tx) = tx_update.transaction.as_ref() else { continue };
 
-                if !matches_account_filter(account_filter.as_deref(), &txn_msg.account_keys)
-                    || tx.signatures.is_empty()
+                let versioned_tx = match bincode::deserialize::<VersionedTransaction>(
+                    &binary_tx.binary_transaction,
+                ) {
+                    Ok(tx) => tx,
+                    Err(err) => {
+                        error!(endpoint = %endpoint_name, error = %err, "Failed to deserialize binary transaction");
+                        continue;
+                    }
+                };
+
+                if !matches_account_filter(
+                    account_filter.as_deref(),
+                    versioned_tx.message.static_account_keys(),
+                ) || versioned_tx.signatures.is_empty()
                 {
                     continue;
                 }
 
                 let wallclock = get_current_timestamp();
                 let elapsed = start_instant.elapsed();
-                let signature = tx
-                    .signatures
-                    .first()
-                    .map(|s| bs58::encode(s).into_string())
-                    .unwrap_or_default();
+                let signature = versioned_tx.signatures[0].to_string();
 
                 if let Some(file) = log_file.as_mut() {
                     write_log_entry(file, wallclock, &endpoint_name, &signature)?;

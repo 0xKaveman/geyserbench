@@ -189,9 +189,11 @@ where
     K: AsRef<[u8]>,
 {
     match filter {
-        Some(wanted) => keys
-            .iter()
-            .any(|key| wanted.iter().any(|candidate| candidate.as_ref() == key.as_ref())),
+        Some(wanted) => keys.iter().any(|key| {
+            wanted
+                .iter()
+                .any(|candidate| candidate.as_ref() == key.as_ref())
+        }),
         None => true,
     }
 }
