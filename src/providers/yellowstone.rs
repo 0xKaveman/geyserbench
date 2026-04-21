@@ -61,15 +61,8 @@ async fn process_yellowstone_endpoint(
     let account_filter = parse_account_filter(&config.account)?;
     let subscription_accounts = account_filter
         .as_ref()
-        .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "yellowstone requires one or more accounts in config.account",
-            )
-        })?
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+        .map(|accounts| accounts.iter().map(ToString::to_string).collect::<Vec<_>>())
+        .unwrap_or_default();
     let endpoint_name = endpoint.name.clone();
     let mut log_file = if tracing::enabled!(Level::TRACE) {
         Some(open_log_file(&endpoint_name)?)
