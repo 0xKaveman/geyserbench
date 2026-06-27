@@ -1,4 +1,4 @@
-use std::{error::Error, net::SocketAddr, sync::atomic::Ordering};
+use std::{error::Error, io::Cursor, net::SocketAddr, sync::atomic::Ordering};
 
 use tokio::{net::UdpSocket, task};
 use tracing::{Level, error, info};
@@ -201,12 +201,32 @@ where
 pub(crate) fn parse_udp_tx_payload(
     payload: &[u8],
 ) -> Result<(Option<u64>, VersionedTransaction), Box<dyn Error + Send + Sync>> {
-    if payload.len() >= 8 {
-        let slot = u64::from_le_bytes(payload[..8].try_into()?);
-        if let Ok(tx) = bincode::deserialize::<VersionedTransaction>(&payload[8..]) {
+    const SLOT_BYTES: usize = 8;
+    const TX_LEN_BYTES: usize = 2;
+
+    if payload.len() >= SLOT_BYTES {
+        let slot = u64::from_le_bytes(payload[..SLOT_BYTES].try_into()?);
+        let slot_payload = &payload[SLOT_BYTES..];
+
+        if slot_payload.len() >= TX_LEN_BYTES {
+            let tx_len = u16::from_le_bytes(slot_payload[..TX_LEN_BYTES].try_into()?) as usize;
+            let tx_start = TX_LEN_BYTES;
+            let tx_end = tx_start.saturating_add(tx_len);
+            if tx_len > 0
+                && tx_end <= slot_payload.len()
+                && let Ok(tx) =
+                    bincode::deserialize::<VersionedTransaction>(&slot_payload[tx_start..tx_end])
+            {
+                return Ok((Some(slot), tx));
+            }
+        }
+
+        let mut cursor = Cursor::new(slot_payload);
+        if let Ok(tx) = bincode::deserialize_from::<_, VersionedTransaction>(&mut cursor) {
             return Ok((Some(slot), tx));
         }
     }
+
     Ok((None, bincode::deserialize::<VersionedTransaction>(payload)?))
 }
 
@@ -228,6 +248,22 @@ mod tests {
         let mut datagram = slot.to_le_bytes().to_vec();
         datagram.extend_from_slice(&serialize(&tx).unwrap());
         let (decoded_slot, decoded_tx) = parse_udp_tx_payload(&datagram).unwrap();
+        assert_eq!(decoded_slot, Some(slot));
+        assert_eq!(decoded_tx, tx);
+    }
+
+    #[test]
+    fn parses_slot_and_length_prefixed_payload() {
+        let slot = 77u64;
+        let tx = sample_tx();
+        let tx_bytes = serialize(&tx).unwrap();
+        let mut datagram = slot.to_le_bytes().to_vec();
+        datagram.extend_from_slice(&(tx_bytes.len() as u16).to_le_bytes());
+        datagram.extend_from_slice(&tx_bytes);
+        datagram.extend_from_slice(b"trailing metadata");
+
+        let (decoded_slot, decoded_tx) = parse_udp_tx_payload(&datagram).unwrap();
+
         assert_eq!(decoded_slot, Some(slot));
         assert_eq!(decoded_tx, tx);
     }

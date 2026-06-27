@@ -24,11 +24,19 @@ pub struct Endpoint {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_addr: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_follow: bool,
     pub kind: EndpointKind,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
@@ -51,6 +59,12 @@ pub enum EndpointKind {
     #[serde(rename = "raw_shred")]
     RawShred,
     Node1,
+    #[serde(
+        rename = "tx_stream",
+        alias = "subscribe_tx_stream",
+        alias = "subscribe-tx-stream"
+    )]
+    TxStream,
     #[serde(rename = "xw_tx")]
     XwTx,
     Shreder,
@@ -98,6 +112,7 @@ impl EndpointKind {
             EndpointKind::ShredstreamRaw => "shredstream_raw",
             EndpointKind::RawShred => "raw_shred",
             EndpointKind::Node1 => "node1",
+            EndpointKind::TxStream => "tx_stream",
             EndpointKind::XwTx => "xw_tx",
             EndpointKind::Shreder => "shreder",
             EndpointKind::ShrederBinary => "shreder_binary",
@@ -126,12 +141,16 @@ impl ConfigToml {
                     name: "grpc".to_string(),
                     url: "http://fra.corvus-labs.io:10101".to_string(),
                     x_token: None,
+                    control_addr: None,
+                    is_follow: false,
                     kind: EndpointKind::Yellowstone,
                 },
                 Endpoint {
                     name: "arpc".to_string(),
                     url: "http://fra.corvus-labs.io:20202".to_string(),
                     x_token: None,
+                    control_addr: None,
+                    is_follow: false,
                     kind: EndpointKind::Arpc,
                 },
             ],
@@ -177,6 +196,33 @@ kind = "node1"
         .unwrap();
 
         assert_eq!(parsed.endpoint[0].kind, EndpointKind::Node1);
+    }
+
+    #[test]
+    fn parses_tx_stream_endpoint_kind_with_control_addr() {
+        let parsed: ConfigToml = toml::from_str(
+            r#"
+[config]
+transactions = 1
+account = "11111111111111111111111111111111"
+commitment = "processed"
+
+[[endpoint]]
+name = "tx-stream"
+url = "udp://0.0.0.0:3032"
+control_addr = "127.0.0.1:3031"
+is_follow = true
+kind = "tx_stream"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.endpoint[0].kind, EndpointKind::TxStream);
+        assert_eq!(
+            parsed.endpoint[0].control_addr.as_deref(),
+            Some("127.0.0.1:3031")
+        );
+        assert!(parsed.endpoint[0].is_follow);
     }
 
     #[test]

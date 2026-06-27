@@ -1,7 +1,7 @@
 use std::{
     error::Error,
-    io,
-    net::{SocketAddrV4, UdpSocket},
+    io::{self, Write},
+    net::{Shutdown, SocketAddrV4, TcpStream, UdpSocket},
     sync::atomic::Ordering,
     time::Duration,
 };
@@ -9,11 +9,13 @@ use std::{
 #[cfg(target_os = "linux")]
 use std::{mem::size_of_val, os::fd::AsRawFd};
 
+use serde::Serialize;
+use solana_pubkey::Pubkey;
 use tokio::{sync::broadcast::error::TryRecvError, task};
-use tracing::{Level, error, info};
+use tracing::{Level, error, info, warn};
 
 use crate::{
-    config::{Config, Endpoint},
+    config::{Config, Endpoint, EndpointKind},
     utils::{TransactionData, get_current_timestamp, open_log_file, write_log_entry},
 };
 
@@ -30,6 +32,12 @@ use super::{
 const NODE1_STREAM_RECVBUF_BYTES: usize = 16 * 1024 * 1024;
 const NODE1_STREAM_PACKET_CAP: usize = 65_535;
 const NODE1_STREAM_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const DEFAULT_TX_STREAM_CONTROL_ADDR: &str = "127.0.0.1:3031";
+
+#[derive(Debug, Serialize)]
+struct StreamFilter {
+    account_include: Vec<Pubkey>,
+}
 
 pub struct Node1Provider;
 
@@ -100,6 +108,35 @@ fn run_node1_stream_loop(
     set_socket_recvbuf(&socket, NODE1_STREAM_RECVBUF_BYTES)
         .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
     info!(endpoint = %endpoint_name, bind = %bind_addr, "node1 UDP listener ready");
+
+    let tx_stream_control_addr = endpoint.control_addr.clone().or_else(|| {
+        (endpoint.kind == EndpointKind::TxStream)
+            .then(|| DEFAULT_TX_STREAM_CONTROL_ADDR.to_string())
+    });
+
+    if let Some(control_addr) = tx_stream_control_addr.as_deref() {
+        let subscribed_accounts = account_filter.as_deref().unwrap_or_else(|| {
+            fatal_connection_error(
+                &endpoint_name,
+                "tx_stream subscriptions require config.account to contain at least one pubkey",
+            )
+        });
+        send_tx_stream_subscribe_request(
+            control_addr,
+            bind_addr.port(),
+            subscribed_accounts,
+            endpoint.is_follow,
+        )
+        .unwrap_or_else(|err| fatal_connection_error(&endpoint_name, err));
+        info!(
+            endpoint = %endpoint_name,
+            control_addr,
+            local_port = bind_addr.port(),
+            is_follow = endpoint.is_follow,
+            accounts = subscribed_accounts.len(),
+            "tx_stream subscribe request sent"
+        );
+    }
 
     let mut accumulator = TransactionAccumulator::new();
     let mut transaction_count = 0usize;
@@ -196,6 +233,24 @@ fn run_node1_stream_loop(
         transaction_count += 1;
     }
 
+    if let Some(control_addr) = tx_stream_control_addr.as_deref() {
+        match send_tx_stream_unsubscribe_request(control_addr, bind_addr.port()) {
+            Ok(()) => info!(
+                endpoint = %endpoint_name,
+                control_addr,
+                local_port = bind_addr.port(),
+                "tx_stream unsubscribe request sent"
+            ),
+            Err(err) => warn!(
+                endpoint = %endpoint_name,
+                control_addr,
+                local_port = bind_addr.port(),
+                error = %err,
+                "Failed to send tx_stream unsubscribe request"
+            ),
+        }
+    }
+
     let unique_signatures = accumulator.len();
     let collected = accumulator.into_inner();
     comparator.add_batch(&endpoint_name, collected);
@@ -205,6 +260,51 @@ fn run_node1_stream_loop(
         unique_signatures,
         "node1 UDP listener closed"
     );
+    Ok(())
+}
+
+fn send_tx_stream_subscribe_request(
+    control_addr: &str,
+    local_port: u16,
+    subscribed_accounts: &[Pubkey],
+    is_follow: bool,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let filter = StreamFilter {
+        account_include: subscribed_accounts.to_vec(),
+    };
+
+    let mut request = Vec::new();
+    request.extend_from_slice(&local_port.to_le_bytes());
+
+    let mut payload = bincode::serialize(&filter)?;
+    payload.push(if is_follow { 1 } else { 0 });
+    request.extend(payload);
+
+    write_tx_stream_control_request(control_addr, &request)
+}
+
+fn send_tx_stream_unsubscribe_request(
+    control_addr: &str,
+    local_port: u16,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let filter = StreamFilter {
+        account_include: Vec::new(),
+    };
+
+    let mut request = Vec::new();
+    request.extend_from_slice(&local_port.to_le_bytes());
+    request.extend(bincode::serialize(&filter)?);
+
+    write_tx_stream_control_request(control_addr, &request)
+}
+
+fn write_tx_stream_control_request(
+    control_addr: &str,
+    request: &[u8],
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut stream = TcpStream::connect(control_addr)?;
+    stream.write_all(request)?;
+    stream.shutdown(Shutdown::Both).ok();
     Ok(())
 }
 

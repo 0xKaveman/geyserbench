@@ -54,6 +54,13 @@ url = "http://localhost:10000"
 kind = "shredstream"
 
 [[endpoint]]
+name = "Local tx-stream"
+url = "udp://0.0.0.0:3032"
+control_addr = "127.0.0.1:3031"
+is_follow = false
+kind = "tx_stream"
+
+[[endpoint]]
 name = "Corvus aRPC"
 url = "https://fra.corvus-labs.io:20202"
 kind = "arpc"
@@ -68,7 +75,7 @@ kind = "yellowstone"
 - `config.transactions` sets how many signatures to evaluate (backend streaming automatically disables itself for extremely large runs).
 - `config.account` is the pubkey monitored for transactions during the benchmark.
 - `config.commitment` accepts `processed`, `confirmed`, or `finalized`.
-- Repeat `[[endpoint]]` blocks for each feed. Supported `kind` values: `yellowstone`, `arpc`, `thor`, `shredstream`, `shredstream_raw`, `shreder`, `shreder_binary`, `jetstream`, `xw_tx`, `node1`, and `raw_shred`. `x_token` is optional.
+- Repeat `[[endpoint]]` blocks for each feed. Supported `kind` values: `yellowstone`, `arpc`, `thor`, `shredstream`, `shredstream_raw`, `shreder`, `shreder_binary`, `jetstream`, `xw_tx`, `node1`, `tx_stream`, and `raw_shred`. `x_token` is optional.
 - `xw_tx` / `node1` / `raw_shred` 都支持本地 UDP：
   - `url` 写成 `udp://IP:PORT`
   - `xw_tx` / `node1` 接收 super-shred 直接推送的命中过滤交易
@@ -77,6 +84,12 @@ kind = "yellowstone"
   - `raw_shred` 的测速时间点是“本地第一次成功把该交易从 shreds 解码出来”的时刻，而不是首个 shred 包到达时刻
   - `config.account` 可写成 `*`，或逗号/空白分隔的多个账户；本地 UDP provider 只会统计命中过滤账户的交易
   - `node1` 额外使用独占阻塞线程和更大的 UDP 接收缓冲，更贴近 node1 的高吞吐接入方式
+- `tx_stream` 会先通过 TCP 控制端口订阅本机 forwarder，再在 `url` 指定的 UDP 端口接收交易：
+  - 默认 `control_addr` 是 `127.0.0.1:3031`，可在 endpoint 中覆盖
+  - 订阅 payload 使用 `[local_port_le16][bincode(StreamFilter)][is_follow_byte]`
+  - 退出时会发送 `[local_port_le16][empty StreamFilter]` 取消订阅
+  - `config.account` 必须至少包含一个 pubkey；该 upstream 不支持 full-stream 订阅
+  - 兼容 `[slot_le64][tx_len_le16][tx_wire_bytes][trailing]` 和 `[slot_le64][tx_wire_bytes]` UDP 包格式
 
 ## CLI Options
 
